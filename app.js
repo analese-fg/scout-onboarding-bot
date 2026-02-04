@@ -1,6 +1,7 @@
 const { App } = require("@slack/bolt");
 const { Client } = require("pg");
 require("dotenv").config();
+const http = require("http");
 
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
@@ -104,26 +105,51 @@ app.command("/new-hire", async ({ ack, body, client }) => {
   });
 });
 
-app.view("new_hire_submission", async ({ ack, body, view }) => {
+app.view("new_hire_submission", async ({ ack, body, view, client }) => {
   await ack();
 
+  const userId = body.user.id;
+  const channelId = body.channel?.id;
   const values = view.state.values;
   const name = values.name_block.name_input.value;
   const email = values.email_block.email_input.value;
   const role = values.role_block.role_input.value;
   const startDate = values.start_date_block.start_date_input.selected_date;
 
-  const dbClient = getDbClient();
-  await dbClient.connect();
+  async function sendResponse(text) {
+    if (channelId) {
+      await client.chat.postEphemeral({
+        channel: channelId,
+        user: userId,
+        text: text,
+      });
+    } else {
+      await client.chat.postMessage({
+        channel: userId,
+        text: text,
+      });
+    }
+  }
 
-  await dbClient.query(
-    "INSERT INTO new_hires (name, email, role, start_date) VALUES ($1, $2, $3, $4)",
-    [name, email, role, startDate]
-  );
+  try {
+    const dbClient = getDbClient();
+    await dbClient.connect();
 
-  await dbClient.end();
+    await dbClient.query(
+      "INSERT INTO new_hires (name, email, role, start_date) VALUES ($1, $2, $3, $4)",
+      [name, email, role, startDate]
+    );
 
-  console.log(`✅ New hire registered: ${name} (${email}) starting ${startDate}`);
+    await dbClient.end();
+
+    console.log(`✅ New hire registered: ${name} (${email}) starting ${startDate}`);
+
+    await sendResponse(`✅ New hire registered!\n\n*Name:* ${name}\n*Email:* ${email}\n*Role:* ${role}\n*Start Date:* ${startDate}`);
+  } catch (error) {
+    console.error("Error registering new hire:", error);
+
+    await sendResponse(`❌ Something went wrong registering ${name}. Please try again or contact support.`);
+  }
 });
 
 app.message(async ({ message, say }) => {
@@ -135,4 +161,12 @@ app.message(async ({ message, say }) => {
 (async () => {
   await app.start();
   console.log("⚡️ Scout is running!");
+
+  const port = process.env.PORT || 3000;
+  http.createServer((req, res) => {
+    res.writeHead(200);
+    res.end("Scout is healthy!");
+  }).listen(port, () => {
+    console.log(`🩺 Health check server running on port ${port}`);
+  });
 })();
