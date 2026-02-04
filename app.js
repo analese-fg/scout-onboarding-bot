@@ -2,6 +2,7 @@ const { App } = require("@slack/bolt");
 const { Client } = require("pg");
 require("dotenv").config();
 const http = require("http");
+const { roles } = require("./checklists");
 
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
@@ -72,12 +73,19 @@ app.command("/new-hire", async ({ ack, body, client }) => {
           type: "input",
           block_id: "role_block",
           element: {
-            type: "plain_text_input",
+            type: "static_select",
             action_id: "role_input",
             placeholder: {
               type: "plain_text",
-              text: "Product Designer",
+              text: "Select a role",
             },
+            options: roles.map((role) => ({
+              text: {
+                type: "plain_text",
+                text: role,
+              },
+              value: role,
+            })),
           },
           label: {
             type: "plain_text",
@@ -113,7 +121,7 @@ app.view("new_hire_submission", async ({ ack, body, view, client }) => {
   const values = view.state.values;
   const name = values.name_block.name_input.value;
   const email = values.email_block.email_input.value;
-  const role = values.role_block.role_input.value;
+  const role = values.role_block.role_input.selected_option.value;
   const startDate = values.start_date_block.start_date_input.selected_date;
 
   async function sendResponse(text) {
