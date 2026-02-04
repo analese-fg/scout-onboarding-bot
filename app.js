@@ -1,8 +1,8 @@
 const { App } = require("@slack/bolt");
 const { Client } = require("pg");
-require("dotenv").config();
 const http = require("http");
 const { roles } = require("./checklists");
+require("dotenv").config();
 
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
@@ -28,6 +28,7 @@ app.command("/new-hire", async ({ ack, body, client }) => {
     view: {
       type: "modal",
       callback_id: "new_hire_submission",
+      private_metadata: body.channel_id,
       title: {
         type: "plain_text",
         text: "Register New Hire",
@@ -117,12 +118,15 @@ app.view("new_hire_submission", async ({ ack, body, view, client }) => {
   await ack();
 
   const userId = body.user.id;
-  const channelId = body.channel?.id;
+  const channelId = view.private_metadata;
+  console.log("Channel ID:", channelId);
   const values = view.state.values;
   const name = values.name_block.name_input.value;
   const email = values.email_block.email_input.value;
   const role = values.role_block.role_input.selected_option.value;
   const startDate = values.start_date_block.start_date_input.selected_date;
+
+  console.log("Channel ID:", channelId);
 
   async function sendResponse(text) {
     if (channelId) {
