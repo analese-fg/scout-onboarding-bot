@@ -3,12 +3,18 @@ const { Client } = require("pg");
 const http = require("http");
 const { roles } = require("./checklists");
 require("dotenv").config();
+const OpenAI = require("openai");
+const { companyKnowledge } = require("./knowledge");
 
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
   signingSecret: process.env.SLACK_SIGNING_SECRET,
   socketMode: true,
   appToken: process.env.SLACK_APP_TOKEN,
+});
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
 function getDbClient() {
@@ -163,11 +169,165 @@ app.view("new_hire_submission", async ({ ack, body, view, client }) => {
     await sendResponse(`❌ Something went wrong registering ${name}. Please try again or contact support.`);
   }
 });
+app.action("request_tool_access", async ({ ack, body, client }) => {
+  await ack();
+
+  const userId = body.user.id;
+
+  await client.views.open({
+    trigger_id: body.trigger_id,
+    view: {
+      type: "modal",
+      callback_id: "tool_access_submission",
+      title: {
+        type: "plain_text",
+        text: "Request Tool Access",
+      },
+      submit: {
+        type: "plain_text",
+        text: "Submit Request",
+      },
+      blocks: [
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: "Select the tools you need access to:",
+          },
+        },
+        {
+          type: "input",
+          block_id: "tools_block",
+          element: {
+            type: "multi_static_select",
+            action_id: "tools_input",
+            placeholder: {
+              type: "plain_text",
+              text: "Select tools",
+            },
+            options: [
+              {
+                text: { type: "plain_text", text: "GitHub" },
+                value: "github",
+              },
+              {
+                text: { type: "plain_text", text: "Figma" },
+                value: "figma",
+              },
+              {
+                text: { type: "plain_text", text: "Linear" },
+                value: "linear",
+              },
+              {
+                text: { type: "plain_text", text: "Notion" },
+                value: "notion",
+              },
+              {
+                text: { type: "plain_text", text: "AWS" },
+                value: "aws",
+              },
+              {
+                text: { type: "plain_text", text: "Other" },
+                value: "other",
+              },
+            ],
+          },
+          label: {
+            type: "plain_text",
+            text: "Tools",
+          },
+        },
+        {
+          type: "input",
+          block_id: "notes_block",
+          optional: true,
+          element: {
+            type: "plain_text_input",
+            action_id: "notes_input",
+            multiline: true,
+            placeholder: {
+              type: "plain_text",
+              text: "Any additional details (e.g., specific repos, team access, etc.)",
+            },
+          },
+          label: {
+            type: "plain_text",
+            text: "Additional Notes",
+          },
+        },
+      ],
+    },
+  });
+});
+
+app.view("tool_access_submission", async ({ ack, body, view, client }) => {
+  await ack();
+
+  const userId = body.user.id;
+  const values = view.state.values;
+  const selectedTools = values.tools_block.tools_input.selected_options.map(
+    (opt) => opt.text.text
+  );
+  const notes = values.notes_block.notes_input.value || "No additional notes";
+
+  const toolList = selectedTools.join(", ");
+
+  await client.chat.postMessage({
+    channel: process.env.HELP_DESK_CHANNEL_ID,
+    text: `🔑 Tool Access Request from <@${userId}>`,
+    blocks: [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `<@U063B8CP2KY> 🔑 *Tool Access Request*\n\n*From:* <@${userId}>\n*Tools requested:* ${toolList}\n*Notes:* ${notes}`,
+        },
+      },
+    ],
+  });
+
+  await client.chat.postMessage({
+    channel: userId,
+    text: `✅ Your request for access to ${toolList} has been submitted! The IT team will get back to you soon.`,
+  });
+
+  console.log(`✅ Tool access request submitted by ${userId}: ${toolList}`);
+});
 
 app.message(async ({ message, say }) => {
-  await say(
-    `👋 Hi there! I'm Scout, your onboarding buddy. You said: "${message.text}"`
-  );
+  console.log("Received message:", message.text);
+  const userMessage = message.text;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `You are Scout, a friendly onboarding assistant for Foxglove. Help new employees with their questions about onboarding, tools, and company information.
+
+Use the following knowledge base to answer questions. If you don't know the answer, say so and suggest they ask in #help-desk or reach out to their manager.
+
+Be concise, friendly, and helpful. Use bullet points for lists. Include relevant links when available.
+
+${companyKnowledge}`,
+        },
+        {
+          role: "user",
+          content: userMessage,
+        },
+      ],
+      max_tokens: 1000,
+    });
+
+    const answer = response.choices[0].message.content;
+    await say(answer);
+  } catch (error) {
+    console.error("Error calling OpenAI:", error);
+    await say(
+      "Sorry, I'm having trouble thinking right now. Please try again or ask in #help-desk for help!"
+    );
+  }
 });
 
 (async () => {
@@ -175,9 +335,23 @@ app.message(async ({ message, say }) => {
   console.log("⚡️ Scout is running!");
 
   const port = process.env.PORT || 3000;
-  http.createServer((req, res) => {
-    res.writeHead(200);
-    res.end("Scout is healthy!");
+  http.createServer(async (req, res) => {
+    if (req.url === "/run-welcome" && req.method === "GET") {
+      console.log("🕐 Running scheduled welcome check...");
+      try {
+        const { sendWelcomeMessages } = require("./welcome");
+        await sendWelcomeMessages();
+        res.writeHead(200);
+        res.end("Welcome messages sent!");
+      } catch (error) {
+        console.error("Error running welcome:", error);
+        res.writeHead(500);
+        res.end("Error running welcome messages");
+      }
+    } else {
+      res.writeHead(200);
+      res.end("Scout is healthy!");
+    }
   }).listen(port, () => {
     console.log(`🩺 Health check server running on port ${port}`);
   });

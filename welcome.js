@@ -1,6 +1,6 @@
 const { Client } = require("pg");
 const { WebClient } = require("@slack/web-api");
-const { getChecklist } = require("./checklists");
+const { getChecklist, formatToolWithLink, NOTION_ONBOARDING_LINK } = require("./checklists");
 require("dotenv").config();
 
 const slack = new WebClient(process.env.SLACK_BOT_TOKEN);
@@ -34,7 +34,7 @@ async function sendWelcomeMessages() {
 
       const checklist = getChecklist(hire.role);
       const taskList = checklist.tasks.map((task) => `☐ ${task}`).join("\n");
-      const toolList = checklist.tools.join(", ");
+      const toolList = checklist.tools.map(formatToolWithLink).join(", ");
 
       await slack.chat.postMessage({
         channel: userId,
@@ -44,7 +44,7 @@ async function sendWelcomeMessages() {
             type: "section",
             text: {
               type: "mrkdwn",
-              text: `👋 *Welcome to Foxglove, ${hire.name}!*\n\nWe're so excited to have you join us as a *${hire.role}*. Here's what you need to do to get started:`,
+              text: `👋 *Welcome to Foxglove, ${hire.name}!*\n\nWe're so excited to have you join us on *${hire.role}*. Here's what you need to do to get started:\n\n📚 <${NOTION_ONBOARDING_LINK}|View the full onboarding guide in Notion>`,
             },
           },
           {
@@ -74,8 +74,22 @@ async function sendWelcomeMessages() {
             type: "section",
             text: {
               type: "mrkdwn",
-              text: "Need access to any tools or have questions? Just message me and I'll help you out!",
+              text: "Need access to any tools? Click the button below to request access:",
             },
+          },
+          {
+            type: "actions",
+            elements: [
+              {
+                type: "button",
+                text: {
+                  type: "plain_text",
+                  text: "🔑 Request Tool Access",
+                },
+                action_id: "request_tool_access",
+                style: "primary",
+              },
+            ],
           },
         ],
       });
@@ -95,4 +109,8 @@ async function sendWelcomeMessages() {
   console.log("Done!");
 }
 
-sendWelcomeMessages();
+if (require.main === module) {
+  sendWelcomeMessages();
+}
+
+module.exports = { sendWelcomeMessages };
