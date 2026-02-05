@@ -12,15 +12,16 @@ const companyKnowledge = `
 Foxglove is a geographically distributed remote-first team. Your colleagues may not keep your same work schedule or be online during your entire work day.
 
 ### Slack (https://foxgloveden.slack.com)
-Slack is the primary communication tool for synchronous and asynchronous communication.
+Slack is the primary communication tool for synchronous and asynchronous communication internally, with customers (in the Foxglove HQ workspace), and with the community (in the Foxglove Community workspace). When in doubt about where to communicate with co-workers, start with Slack.
+- Slack conversations are ephemeral and not a permanent record. The workspace is configured to delete messages after 90 days. Decisions and action items from Slack discussions should move into Github tickets, Notion pages, or other appropriate documents.
 - Prefer to post in open channels over private channels for knowledge osmosis
 - Use threads - signal a thread with the 🧵 emoji
-- There are no stupid questions - NEVER ridicule a question or the asker
+- There are no stupid questions - NEVER ridicule a question or the asker. If you don't want to answer, remain silent.
 - Be mindful of conversation context - avoid derailing discussions
-- Note: Slack messages are deleted after 90 days. Move decisions and action items to Github tickets or Notion pages.
 
 ### Linear (https://linear.app)
 Linear is the primary issue tracking, project planning, and project tracking tool. All closed source repos use Linear for issue tracking.
+- Some open source repos use per-repo Issues for community visibility. Bugs and select issues are mirrored to Linear for planning and tracking.
 - Use Favorites to quickly find relevant views: https://linear.app/docs/favorites
 - My Issues provides a list of your assignments: https://linear.app/docs/my-issues
 - Use the Inbox to manage updates: https://linear.app/docs/inbox
@@ -31,14 +32,16 @@ Linear is the primary issue tracking, project planning, and project tracking too
 - If you forget to use the branch name, write "Fixes: FG-###" or "Resolves: FG-###" in the PR description
 
 ### Github (https://github.com/foxglove)
-Github is for source control, change review, and CI/CD.
+Github is for source control, change review, and CI/CD. Communication around pull requests should default to Github and fall back to Slack when synchronous collaboration is needed.
 - Configure your Github notifications - being messaged via Github is equivalent to Slack
 - Turn off email notifications and use the Notifications dashboard: https://github.com/notifications
 - Do not expect a separate Slack message when someone comments on your PR
-- If conversation devolves into back-and-forth, schedule a synchronous conversation
+- Be thorough in your communication; your reader may be in a different timezone or work hours
+- If conversation devolves into back-and-forth, schedule a synchronous conversation or move the discussion to a design document
 
 ### Notion
 Notion is the knowledge base. When you want to learn about why/what/how to do something, start with Notion. All processes and collaboration documents should be discoverable via Notion.
+Any documents you expect others to find should be discoverable from Notion.
 
 ### Google Docs & Drive
 Use Google docs for collaborative documents since it has better commenting and editing features.
@@ -46,13 +49,15 @@ Use Google docs for collaborative documents since it has better commenting and e
 - Prefer this drive unless the document is sensitive
 
 ### Open Meetings
-We prefer to post meetings on an open calendar for visibility.
+We prefer to post meetings on an open calendar for visibility. Since we are a remote team we have the unique advantage of taking up no more space for a meeting with 3 participants vs one with 10.
 - Add the Open Meetings calendar: https://calendar.google.com/calendar/u/0/embed?src=c_4d76e7ce4e1149be2eeab8efd646759f925b7d939a48bbe867a00ced85e09d83@group.calendar.google.com
 - Click the (+) icon in the bottom right to add it to your Google Calendar
 - When joining as an observer, use meeting chat for questions so participants can address when able
+- Synchronous meetings are time expensive for the participants - be mindful of your colleagues' time
 
 ## Decision-Making at Foxglove
 Use the Decision-Making Template for decisions impacting Foxglove: https://docs.google.com/document/d/1FACt-f7DcRZ93rnhdpk7joIP_6Pk43qv9spurCZynGY/edit
+The objective is to enable DRIs (Directly Responsible Individuals) to get feedback from stakeholders quickly and act on decisions needed to execute.
 
 Use this template when:
 - Deciding between features or technical trade-offs
@@ -65,10 +70,11 @@ Tips for effective decision documents:
 - Write for the decision-maker, not the author
 
 Example decision documents:
-- Org-switching vs Workspaces: https://docs.google.com/document/d/1r7EOng9RRLUZ34FE3GZeQSR7Nt8Q_CNdelG2uUqm8NI/edit
-- SDK & Agent Architecture Decision: https://docs.google.com/document/d/1jR14QeKBmGf1KpuCLM_Y6eVrfExkD-NlzbVBG5ibSrY/edit
+- Decision: Org-switching vs Workspaces: https://docs.google.com/document/d/1r7EOng9RRLUZ34FE3GZeQSR7Nt8Q_CNdelG2uUqm8NI/edit
+- SDK & Agent Architecture Decision: Open Source and Remote Visualization: https://docs.google.com/document/d/1jR14QeKBmGf1KpuCLM_Y6eVrfExkD-NlzbVBG5ibSrY/edit
 
 ## People and Operations
+This is a living handbook, meant to change as we grow.
 - Performance Reviews: https://www.notion.so/foxglovehq/3e74a47d95884865925c4358fb74cddf
 - Contact Details & Company Directory: https://www.notion.so/foxglovehq/2f3a1ff94a4d41a7bc5a51a8a1b2571a
 - Expenses at Foxglove: https://www.notion.so/foxglovehq/ed16407d3e844910959c359bf5480bc8
@@ -92,6 +98,8 @@ Example decision documents:
 - Product Engineering at Foxglove: https://www.notion.so/foxglovehq/1eccbc8e56a380d9939acaf09be3d1d7
 - API Design Principles: https://www.notion.so/foxglovehq/7e419b0dc51646a7981cd9d13bc52b97
 - Visual Regression Testing: https://www.notion.so/foxglovehq/2b9cbc8e56a38051a551cc0bfd8483a8
+- Language Strategy: https://www.notion.so/foxglovehq/0a93dac94bda44209dded6635827b203
+- Engineering Holiday On-Call Policy: https://www.notion.so/foxglovehq/2e0cbc8e56a380e4a3a2ee37a945782e
 
 ### Developer Workflow
 This builds on the Communication & Collaboration page with engineering-specific workflows.
@@ -117,11 +125,23 @@ This builds on the Communication & Collaboration page with engineering-specific 
 - Changes to main should happen via pull-request - avoid pushing directly
 - Main should always be green - if tests are failing, time is wasted debugging
 - Use the project template for new repos: https://github.com/foxglove/template-typescript
+- If you disagree with a pattern used in the template, open a PR to change it
 
 #### Consistency Guidelines
 - Avoid introducing new tools unless justified - discuss with team first
-- Avoid introducing new languages - TypeScript is primary, Go for performance-sensitive backend
+- Avoid introducing new languages - TypeScript is primary, Rust for performance-sensitive and on-robot components. Go is used historically in some server components but should not be used for new components.
 - Avoid introducing new frameworks - use what's already in use elsewhere
+
+#### Language Strategy
+- TypeScript: Default language for all frontend and backend components
+- Rust: For performance and resource-sensitive components, including on-robot components, and any server, desktop, or web components where JavaScript performance is exhausted. Chosen over Go (no GC, better Wasm fit, robotics ecosystem adoption) and C++ (memory safe, modern package management).
+- Python and C++: Used for customer-facing SDKs, documentation, and blog posts. Python is the lingua franca of robotics for customer-facing examples.
+- Go: Historical use only in some server components. Should not be used for new components; existing components should be rewritten in Rust as time permits.
+
+#### Engineering Holiday On-Call Policy
+- Over company breaks, on-call coverage must be scheduled for engineering
+- Leadership is responsible for ensuring coverage is scheduled ahead of time
+- Each 24-hour on-call shift is compensated with 4 hours of PTO
 
 ## Tools and How to Access Them
 
@@ -149,22 +169,31 @@ This builds on the Communication & Collaboration page with engineering-specific 
 - Human Interest (401k): Will send email to your personal email
 
 ## Policies
-Foxglove has policies covering:
+Foxglove maintains the following policies (full list at https://www.notion.so/foxglovehq/5447ab8fb96746c1be6124a273fc9de0):
 - Access Control Policy
-- Code of Conduct
-- Information Security Policy
-- Human Resource Security Policy
-- Anti-Harassment Policy
 - Anti-Fraud, Anti-Bribery & Anti-Corruption Policy
-- Whistleblower Policy
-- GDPR Compliance Policy
-- Incident Response Plan
-- Data Management Policy
+- Anti-Harassment Policy
+- Asset Management Policy
+- Business Continuity and Disaster Recovery (BC/DR)
+- Cash Management and Treasury Policy
+- Code of Conduct
 - Cryptography Policy
+- Data Management Policy
+- GDPR Compliance Policy
+- Human Resource Security Policy
+- Incident Response Plan
+- Information Security Policy
+- Information Security Roles and Responsibilities Policy
+- Internal Systems Access Policy
+- Network and System Hardening Standards
+- Operations Security Policy
 - Physical Security Policy
+- Risk Management Policy
+- Secure Development Policy
+- System Description
+- Termination of Employment Policy
 - Third-Party Management Policy
-- Business Continuity and Disaster Recovery
-- And more at: https://www.notion.so/foxglovehq/5447ab8fb96746c1be6124a273fc9de0
+- Whistleblower Policy
 
 ## Common Questions
 
@@ -192,6 +221,9 @@ Key points: Request review explicitly, check GitHub notifications, avoid back-an
 
 ### Who do I contact for HR questions?
 Book time with Britt: https://calendar.app.google/wxpd1jmVn8Bxks1M6
+
+### What languages does Foxglove use?
+TypeScript (primary), Rust (performance-sensitive/on-robot), Python and C++ (customer-facing). Go is historical only - do not use for new components. See Language Strategy: https://www.notion.so/foxglovehq/0a93dac94bda44209dded6635827b203
 `;
 
 module.exports = { companyKnowledge };

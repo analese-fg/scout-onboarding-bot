@@ -5,6 +5,23 @@ const { roles } = require("./checklists");
 require("dotenv").config();
 const Anthropic = require("@anthropic-ai/sdk").default;
 const { companyKnowledge } = require("./knowledge");
+const { getResourceResponse } = require("./resources");
+
+/**
+ * Convert markdown formatting to Slack mrkdwn formatting.
+ * Runs after Claude responds to catch any markdown that slipped through.
+ */
+function toSlackFormat(text) {
+  return text
+    // Convert markdown links [text](url) to Slack <url|text>
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "<$2|$1>")
+    // Convert **bold** to *bold* (must come before single asterisk handling)
+    .replace(/\*\*(.+?)\*\*/g, "*$1*")
+    // Convert __underline__ to _underline_ (Slack uses single underscores for italic)
+    .replace(/__(.+?)__/g, "_$1_")
+    // Convert ### headers to bold text
+    .replace(/^#{1,3}\s+(.+)$/gm, "*$1*");
+}
 
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
@@ -212,10 +229,47 @@ app.view("new_hire_submission", async ({ ack, body, view, client }) => {
     await sendResponse(`❌ Something went wrong registering ${name}. Please try again or contact support.`);
   }
 });
+
 app.action("request_tool_access", async ({ ack, body, client }) => {
   await ack();
 
   const userId = body.user.id;
+  
+  let userRole = null;
+  try {
+    const userInfo = await client.users.info({ user: userId });
+    const userEmail = userInfo.user.profile.email;
+    
+    const dbClient = getDbClient();
+    await dbClient.connect();
+    const result = await dbClient.query(
+      "SELECT role FROM new_hires WHERE email = $1",
+      [userEmail]
+    );
+    await dbClient.end();
+    
+    if (result.rows.length > 0) {
+      userRole = result.rows[0].role;
+    }
+  } catch (error) {
+    console.error("Error looking up user role:", error);
+  }
+
+  const { getRequestableTools, getRequestableToolsForRole } = require("./checklists");
+  const allRequestableTools = getRequestableTools();
+  const roleTools = userRole ? getRequestableToolsForRole(userRole) : [];
+
+  const toolOptions = allRequestableTools.map((tool) => ({
+    text: { type: "plain_text", text: tool },
+    value: tool.toLowerCase().replace(/\s+/g, "_"),
+  }));
+
+  const initialOptions = roleTools.length > 0 
+    ? roleTools.map((tool) => ({
+        text: { type: "plain_text", text: tool },
+        value: tool.toLowerCase().replace(/\s+/g, "_"),
+      }))
+    : undefined;
 
   await client.views.open({
     trigger_id: body.trigger_id,
@@ -235,7 +289,9 @@ app.action("request_tool_access", async ({ ack, body, client }) => {
           type: "section",
           text: {
             type: "mrkdwn",
-            text: "Select the tools you need access to:",
+            text: userRole 
+              ? `Based on your role (*${userRole}*), we've pre-selected some tools you might need. Feel free to adjust:`
+              : "Select the tools you need access to:",
           },
         },
         {
@@ -248,32 +304,8 @@ app.action("request_tool_access", async ({ ack, body, client }) => {
               type: "plain_text",
               text: "Select tools",
             },
-            options: [
-              {
-                text: { type: "plain_text", text: "GitHub" },
-                value: "github",
-              },
-              {
-                text: { type: "plain_text", text: "Figma" },
-                value: "figma",
-              },
-              {
-                text: { type: "plain_text", text: "Linear" },
-                value: "linear",
-              },
-              {
-                text: { type: "plain_text", text: "Notion" },
-                value: "notion",
-              },
-              {
-                text: { type: "plain_text", text: "AWS" },
-                value: "aws",
-              },
-              {
-                text: { type: "plain_text", text: "Other" },
-                value: "other",
-              },
-            ],
+            options: toolOptions,
+            ...(initialOptions && initialOptions.length > 0 && { initial_options: initialOptions }),
           },
           label: {
             type: "plain_text",
@@ -344,6 +376,14 @@ app.message(async ({ message, say, client }) => {
   console.log("Received message:", message.text);
   const userMessage = message.text;
 
+  // ── Fast-path: keyword resource lookup (no API call needed) ──
+  const resourceResponse = getResourceResponse(userMessage);
+  if (resourceResponse) {
+    await say(resourceResponse);
+    return;
+  }
+
+  // ── Full path: send to Claude for conversational answers ──
   let thinkingMessage = null;
   let thinkingTimeout = null;
 
@@ -367,6 +407,7 @@ Guidelines:
 - Only include the most relevant information for their specific question
 - Include 1-2 helpful links when relevant, but don't overwhelm with links
 - Use a friendly, casual tone—you're a buddy, not a manual
+- If someone asks a broad question like "where can I find resources" or "I need help getting started", point them to key pages: Notion knowledge base, Communication & Collaboration guide, People & Operations, and Policies
 
 What you can help with:
 - Questions about Foxglove tools, processes, and policies—use the knowledge base below
@@ -393,7 +434,7 @@ ${companyKnowledge}`,
 
     clearTimeout(thinkingTimeout);
 
-    const answer = response.content[0].text;
+    const answer = toSlackFormat(response.content[0].text);
 
     if (thinkingMessage) {
       await client.chat.update({

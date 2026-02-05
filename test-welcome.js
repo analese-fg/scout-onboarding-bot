@@ -5,19 +5,6 @@ require("dotenv").config();
 
 const slack = new WebClient(process.env.SLACK_BOT_TOKEN);
 
-function getDbClient() {
-  return new Client({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false },
-  });
-}
-
-function isLocalTime10am(timezone) {
-  const now = new Date();
-  const localTime = new Date(now.toLocaleString("en-US", { timeZone: timezone }));
-  return localTime.getHours() === 10;
-}
-
 function formatTasksWithLinks(tasks) {
   return tasks.map((task) => {
     if (task.includes("I-9 verification")) {
@@ -65,7 +52,6 @@ function formatPreDay1Tasks(tasks) {
 function buildWelcomeBlocks(hire, checklist) {
   const blocks = [];
   
-  // Welcome header with role-specific onboarding link
   let onboardingLinks = `📚 <${NOTION_ONBOARDING_LINK}|First Day Checklist>`;
   if (hire.role === "Product") {
     onboardingLinks += ` · <${NOTION_PRODUCT_ONBOARDING_LINK}|Product Onboarding>`;
@@ -209,12 +195,15 @@ function buildWelcomeBlocks(hire, checklist) {
   return blocks;
 }
 
-async function sendWelcomeMessages() {
-  const dbClient = getDbClient();
-  await dbClient.connect();
+async function testWelcome() {
+  const client = new Client({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false },
+  });
+  await client.connect();
 
   const today = new Date().toISOString().split("T")[0];
-  const result = await dbClient.query(
+  const result = await client.query(
     "SELECT * FROM new_hires WHERE start_date = $1 AND welcome_sent = FALSE",
     [today]
   );
@@ -222,13 +211,6 @@ async function sendWelcomeMessages() {
   console.log(`Found ${result.rows.length} new hires starting today`);
 
   for (const hire of result.rows) {
-    const timezone = hire.timezone || "America/Los_Angeles";
-    
-    if (!isLocalTime10am(timezone)) {
-      console.log(`Skipping ${hire.name} - not 10am in ${timezone} yet`);
-      continue;
-    }
-
     try {
       const user = await slack.users.lookupByEmail({ email: hire.email });
       const userId = user.user.id;
@@ -241,23 +223,20 @@ async function sendWelcomeMessages() {
         blocks: blocks,
       });
 
-      await dbClient.query(
+      await client.query(
         "UPDATE new_hires SET slack_user_id = $1, welcome_sent = TRUE WHERE id = $2",
         [userId, hire.id]
       );
 
-      console.log(`✅ Welcome message sent to ${hire.name} (${timezone})`);
+      console.log(`✅ Welcome message sent to ${hire.name}`);
     } catch (error) {
       console.error(`❌ Failed to send welcome to ${hire.name}:`, error.message);
     }
   }
 
-  await dbClient.end();
+  await client.end();
   console.log("Done!");
 }
 
-if (require.main === module) {
-  sendWelcomeMessages();
-}
-
-module.exports = { sendWelcomeMessages, buildWelcomeBlocks };
+// Run immediately without timezone check
+testWelcome();
