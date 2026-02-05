@@ -229,50 +229,24 @@ app.view("new_hire_submission", async ({ ack, body, view, client }) => {
     await sendResponse(`❌ Something went wrong registering ${name}. Please try again or contact support.`);
   }
 });
+// =====================================================
+// TOOL ACCESS REQUEST — shared logic + two entry points
+// =====================================================
 
-app.action("request_tool_access", async ({ ack, body, client }) => {
-  await ack();
-
-  const userId = body.user.id;
-  
-  let userRole = null;
-  try {
-    const userInfo = await client.users.info({ user: userId });
-    const userEmail = userInfo.user.profile.email;
-    
-    const dbClient = getDbClient();
-    await dbClient.connect();
-    const result = await dbClient.query(
-      "SELECT role FROM new_hires WHERE email = $1",
-      [userEmail]
-    );
-    await dbClient.end();
-    
-    if (result.rows.length > 0) {
-      userRole = result.rows[0].role;
-    }
-  } catch (error) {
-    console.error("Error looking up user role:", error);
-  }
-
+// Shared function: opens the tool request modal immediately, then
+// updates it with role-specific pre-selections if we find the user in the DB.
+async function openToolRequestModal({ client, triggerId, userId }) {
   const { getRequestableTools, getRequestableToolsForRole } = require("./checklists");
   const allRequestableTools = getRequestableTools();
-  const roleTools = userRole ? getRequestableToolsForRole(userRole) : [];
 
   const toolOptions = allRequestableTools.map((tool) => ({
     text: { type: "plain_text", text: tool },
     value: tool.toLowerCase().replace(/\s+/g, "_"),
   }));
 
-  const initialOptions = roleTools.length > 0 
-    ? roleTools.map((tool) => ({
-        text: { type: "plain_text", text: tool },
-        value: tool.toLowerCase().replace(/\s+/g, "_"),
-      }))
-    : undefined;
-
-  await client.views.open({
-    trigger_id: body.trigger_id,
+  // Open modal immediately to avoid trigger_id expiration
+  const modalResponse = await client.views.open({
+    trigger_id: triggerId,
     view: {
       type: "modal",
       callback_id: "tool_access_submission",
@@ -289,9 +263,7 @@ app.action("request_tool_access", async ({ ack, body, client }) => {
           type: "section",
           text: {
             type: "mrkdwn",
-            text: userRole 
-              ? `Based on your role (*${userRole}*), we've pre-selected some tools you might need. Feel free to adjust:`
-              : "Select the tools you need access to:",
+            text: "Select the tools you need access to:",
           },
         },
         {
@@ -305,7 +277,6 @@ app.action("request_tool_access", async ({ ack, body, client }) => {
               text: "Select tools",
             },
             options: toolOptions,
-            ...(initialOptions && initialOptions.length > 0 && { initial_options: initialOptions }),
           },
           label: {
             type: "plain_text",
@@ -332,6 +303,116 @@ app.action("request_tool_access", async ({ ack, body, client }) => {
         },
       ],
     },
+  });
+
+  // Now try to update the modal with role-specific pre-selections
+  try {
+    const userInfo = await client.users.info({ user: userId });
+    const userEmail = userInfo.user.profile.email;
+
+    const dbClient = getDbClient();
+    await dbClient.connect();
+    const result = await dbClient.query(
+      "SELECT role FROM new_hires WHERE email = $1",
+      [userEmail]
+    );
+    await dbClient.end();
+
+    if (result.rows.length > 0) {
+      const userRole = result.rows[0].role;
+      const roleTools = getRequestableToolsForRole(userRole);
+
+      if (roleTools.length > 0) {
+        const initialOptions = roleTools.map((tool) => ({
+          text: { type: "plain_text", text: tool },
+          value: tool.toLowerCase().replace(/\s+/g, "_"),
+        }));
+
+        await client.views.update({
+          view_id: modalResponse.view.id,
+          view: {
+            type: "modal",
+            callback_id: "tool_access_submission",
+            title: {
+              type: "plain_text",
+              text: "Request Tool Access",
+            },
+            submit: {
+              type: "plain_text",
+              text: "Submit Request",
+            },
+            blocks: [
+              {
+                type: "section",
+                text: {
+                  type: "mrkdwn",
+                  text: `Based on your role (*${userRole}*), we've pre-selected some tools you might need. Feel free to adjust:`,
+                },
+              },
+              {
+                type: "input",
+                block_id: "tools_block",
+                element: {
+                  type: "multi_static_select",
+                  action_id: "tools_input",
+                  placeholder: {
+                    type: "plain_text",
+                    text: "Select tools",
+                  },
+                  options: toolOptions,
+                  initial_options: initialOptions,
+                },
+                label: {
+                  type: "plain_text",
+                  text: "Tools",
+                },
+              },
+              {
+                type: "input",
+                block_id: "notes_block",
+                optional: true,
+                element: {
+                  type: "plain_text_input",
+                  action_id: "notes_input",
+                  multiline: true,
+                  placeholder: {
+                    type: "plain_text",
+                    text: "Any additional details (e.g., specific repos, team access, etc.)",
+                  },
+                },
+                label: {
+                  type: "plain_text",
+                  text: "Additional Notes",
+                },
+              },
+            ],
+          },
+        });
+      }
+    }
+  } catch (error) {
+    // Modal is already open — role pre-selection is just a nice-to-have
+    console.log("Could not pre-select role tools:", error.message);
+  }
+}
+
+// Entry point 1: Button click from welcome message
+app.action("request_tool_access", async ({ ack, body, client }) => {
+  await ack();
+  await openToolRequestModal({
+    client,
+    triggerId: body.trigger_id,
+    userId: body.user.id,
+  });
+});
+
+// Entry point 2: Slash command from any channel
+app.command("/request-tools", async ({ ack, body, client }) => {
+  await ack();
+  await openToolRequestModal({
+    client,
+    triggerId: body.trigger_id,
+    userId: body.user_id,
   });
 });
 
