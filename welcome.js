@@ -193,7 +193,7 @@ function buildWelcomeBlocks(hire, checklist) {
     type: "section",
     text: {
       type: "mrkdwn",
-      text: "Need access to any tools? Use <slack://channel?team=T&id=C09V0PX6UTU|#help-desk> with <@U063B8CP2KY> or click below:",
+      text: "Need access to any tools? Use <slack://channel?team=T&id=C09V0PX6UTU|#help-desk> with <@U063B8CP2KY>, click below, or type `/request-tools` anytime in any channel where Scout is:",
     },
   });
   blocks.push({

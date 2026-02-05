@@ -6,7 +6,17 @@ require("dotenv").config();
 const Anthropic = require("@anthropic-ai/sdk").default;
 const { companyKnowledge } = require("./knowledge");
 const { getResourceResponse } = require("./resources");
+const HR_AUTHORIZED_USERS = [
+  "U03TWUE0Q57", // Britt
+  // "U0ABATGQMQ9", // Mallu
+  "U09LQ09632A", // Mel
+  // "U0AARJ58XB5", // Neima
+  "U06C0VATZC5", // Steph
+  "U0AC9NW0EBF", // Analese
 
+
+  // Add more user IDs here as needed
+]
 /**
  * Convert markdown formatting to Slack mrkdwn formatting.
  * Runs after Claude responds to catch any markdown that slipped through.
@@ -46,6 +56,14 @@ function getDbClient() {
 app.command("/new-hire", async ({ ack, body, client }) => {
   await ack();
 
+  if (!HR_AUTHORIZED_USERS.includes(body.user_id)) {
+    await client.chat.postEphemeral({
+      channel: body.channel_id,
+      user: body.user_id,
+      text: "⛔ Sorry, `/new-hire` is restricted to HR team members. If you think you should have access, reach out to <@U03TWUE0Q57>.",
+    });
+    return;
+  }
   await client.views.open({
     trigger_id: body.trigger_id,
     view: {
@@ -413,6 +431,65 @@ app.command("/request-tools", async ({ ack, body, client }) => {
     client,
     triggerId: body.trigger_id,
     userId: body.user_id,
+  });
+});
+
+app.command("/scout-help", async ({ ack, body, client }) => {
+  await ack();
+
+  await client.chat.postEphemeral({
+    channel: body.channel_id,
+    user: body.user_id,
+    text: "🐾 *Here's what I can do!*",
+    blocks: [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: "🐾 *Hi, I'm Scout — your onboarding buddy!*\n\nHere's everything I can help with:",
+        },
+      },
+      { type: "divider" },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: "*💬 DM me anytime*\nAsk me questions about Foxglove tools, processes, policies, or anything else — I'll do my best to help or point you in the right direction.",
+        },
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: "*🔑 `/request-tools`*\nRequest access to Foxglove tools like GitHub, PostHog, HubSpot, and more. I'll pre-select tools based on your role and send the request to the IT team.",
+        },
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: "*📋 `/new-hire`* _(HR only)_\nRegister a new employee with their name, email, role, start date, and timezone. They'll get a personalized welcome message on their first day.",
+        },
+      },
+      { type: "divider" },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: "*Quick keyword shortcuts*\nDM me any of these for instant links:\n`resources` · `engineering` · `policies` · `linear` · `help` · `people ops` · `tool access` · `communication` · `decisions`",
+        },
+      },
+      { type: "divider" },
+      {
+        type: "context",
+        elements: [
+          {
+            type: "mrkdwn",
+            text: "🙋 Still stuck? Post in <slack://channel?team=T&id=C09V0PX6UTU|#help-desk> or <https://calendar.app.google/wxpd1jmVn8Bxks1M6|book time with Britt>",
+          },
+        ],
+      },
+    ],
   });
 });
 

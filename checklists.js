@@ -24,7 +24,7 @@ const toolInfo = {
   "Ashby": { link: "https://app.ashbyhq.com", access: "request" },
   "CoderPad": { link: "https://coderpad.io", access: "request" },
   "Apollo": { link: "https://app.apollo.io", access: "request" },
-  "Figma": { link: "https://www.figma.com", access: "request", note: "Sign up via SSO, then request a license. If ticket doesn't work, ask Ellis Neder for a team invite" },
+  "Figma": { link: "https://www.figma.com", access: "request", note: "Sign up via SSO, then request a license. If #help-desk ticket doesn't work, ask <@U07580YG0G1> for a team invite" },
   "Claude": { link: "https://app.rippling.com/app-shop/app/claude_custom_1_6399599d33dbbc8536982ef5", access: "rippling" },
   "Cursor": { link: "https://cursor.com/team/accept-invite?code=7421262f2546c5ce25c7d08b48e795213acfa05cd46df0d2", access: "request" },
   "Brex": { link: null, access: "email", note: "Check your email for an invite from Brex" },
