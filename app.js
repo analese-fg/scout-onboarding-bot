@@ -197,6 +197,107 @@ app.command("/new-hire", async ({ ack, body, client }) => {
   });
 });
 
+app.command("/retry-welcome", async ({ ack, body, client }) => {
+  await ack();
+
+  if (!HR_AUTHORIZED_USERS.includes(body.user_id)) {
+    await client.chat.postEphemeral({
+      channel: body.channel_id,
+      user: body.user_id,
+      text: "⛔ Sorry, `/retry-welcome` is restricted to HR team members.",
+    });
+    return;
+  }
+
+  const dbClient = getDbClient();
+  await dbClient.connect();
+  const result = await dbClient.query(
+    "SELECT id, name, email, role, start_date FROM new_hires WHERE welcome_sent = FALSE ORDER BY start_date ASC"
+  );
+  await dbClient.end();
+
+  if (result.rows.length === 0) {
+    await client.chat.postEphemeral({
+      channel: body.channel_id,
+      user: body.user_id,
+      text: "✅ No pending welcome messages — all new hires have been welcomed!",
+    });
+    return;
+  }
+
+  const options = result.rows.map((hire) => ({
+    text: {
+      type: "plain_text",
+      text: `${hire.name} (${hire.role}) — ${hire.start_date.toISOString().split("T")[0]}`,
+    },
+    value: String(hire.id),
+  }));
+
+  await client.views.open({
+    trigger_id: body.trigger_id,
+    view: {
+      type: "modal",
+      callback_id: "retry_welcome_submission",
+      title: {
+        type: "plain_text",
+        text: "Retry Welcome Message",
+      },
+      submit: {
+        type: "plain_text",
+        text: "Send Welcome",
+      },
+      blocks: [
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: `*${result.rows.length} new hire(s) haven't received their welcome yet:*`,
+          },
+        },
+        {
+          type: "input",
+          block_id: "hire_block",
+          element: {
+            type: "static_select",
+            action_id: "hire_input",
+            placeholder: {
+              type: "plain_text",
+              text: "Select a new hire",
+            },
+            options: options,
+          },
+          label: {
+            type: "plain_text",
+            text: "New Hire",
+          },
+        },
+      ],
+    },
+  });
+});
+
+app.view("retry_welcome_submission", async ({ ack, body, view, client }) => {
+  await ack();
+
+  const userId = body.user.id;
+  const hireId = view.state.values.hire_block.hire_input.selected_option.value;
+
+  try {
+    const { sendWelcomeToHire } = require("./welcome");
+    const result = await sendWelcomeToHire(hireId);
+
+    await client.chat.postMessage({
+      channel: userId,
+      text: `✅ Welcome message sent to *${result.name}* (${result.email})!`,
+    });
+  } catch (error) {
+    await client.chat.postMessage({
+      channel: userId,
+      text: `❌ ${error.message}`,
+    });
+  }
+});
+
 app.view("new_hire_submission", async ({ ack, body, view, client }) => {
   await ack();
 
@@ -465,12 +566,12 @@ app.command("/scout-help", async ({ ack, body, client }) => {
         },
       },
       {
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text: "*📋 `/new-hire`* _(HR only)_\nRegister a new employee with their name, email, role, start date, and timezone. They'll get a personalized welcome message on their first day.",
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: "*📋 `/new-hire`* _(HR only)_\nRegister a new employee with their name, email, role, start date, and timezone. They'll get a personalized welcome message on their first day.\n\n*🔄 `/retry-welcome`* _(HR only)_\nResend a welcome message to any new hire who hasn't received one yet.",
+          },
         },
-      },
       { type: "divider" },
       {
         type: "section",

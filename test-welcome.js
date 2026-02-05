@@ -5,16 +5,21 @@ const { buildWelcomeBlocks } = require("./welcome");
 require("dotenv").config();
 
 const slack = new WebClient(process.env.SLACK_BOT_TOKEN);
+const HR_NOTIFY_USER = "U0AC9NW0EBF" //"U03TWUE0Q57"; // Britt
 
-async function testWelcome() {
-  const client = new Client({
+function getDbClient() {
+  return new Client({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false },
   });
-  await client.connect();
+}
+
+async function testWelcome() {
+  const dbClient = getDbClient();
+  await dbClient.connect();
 
   const today = new Date().toISOString().split("T")[0];
-  const result = await client.query(
+  const result = await dbClient.query(
     "SELECT * FROM new_hires WHERE start_date = $1 AND welcome_sent = FALSE",
     [today]
   );
@@ -34,7 +39,7 @@ async function testWelcome() {
         blocks: blocks,
       });
 
-      await client.query(
+      await dbClient.query(
         "UPDATE new_hires SET slack_user_id = $1, welcome_sent = TRUE WHERE id = $2",
         [userId, hire.id]
       );
@@ -42,10 +47,28 @@ async function testWelcome() {
       console.log(`✅ Welcome message sent to ${hire.name}`);
     } catch (error) {
       console.error(`❌ Failed to send welcome to ${hire.name}:`, error.message);
+
+      try {
+        let failureMsg = `⚠️ Failed to send welcome message to *${hire.name}* (${hire.email}, ${hire.role}).`;
+        if (error.data?.error === "users_not_found") {
+          failureMsg += `\n\nTheir Slack account doesn't exist yet. Use \`/retry-welcome\` to try again once their account is created.`;
+        } else {
+          failureMsg += `\n\nError: ${error.message}\nUse \`/retry-welcome\` to try again.`;
+        }
+
+        console.log(`📩 Notifying HR about failure for ${hire.name}...`);
+        await slack.chat.postMessage({
+          channel: HR_NOTIFY_USER,
+          text: failureMsg,
+        });
+        console.log(`📩 HR notified!`);
+      } catch (notifyError) {
+        console.error("Failed to notify HR:", notifyError.message);
+      }
     }
   }
 
-  await client.end();
+  await dbClient.end();
   console.log("Done!");
 }
 

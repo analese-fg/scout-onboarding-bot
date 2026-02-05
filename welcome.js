@@ -4,6 +4,7 @@ const { getChecklist, formatToolWithLink, getToolsByAccess, NOTION_ONBOARDING_LI
 require("dotenv").config();
 
 const slack = new WebClient(process.env.SLACK_BOT_TOKEN);
+const HR_NOTIFY_USER = "U0AC9NW0EBF" //"U03TWUE0Q57"; // notify Britt of failures
 
 function getDbClient() {
   return new Client({
@@ -209,6 +210,49 @@ function buildWelcomeBlocks(hire, checklist) {
   return blocks;
 }
 
+async function sendWelcomeToHire(hireId) {
+  const dbClient = getDbClient();
+  await dbClient.connect();
+
+  const result = await dbClient.query("SELECT * FROM new_hires WHERE id = $1", [hireId]);
+
+  if (result.rows.length === 0) {
+    await dbClient.end();
+    throw new Error("Couldn't find that new hire. They may have been removed.");
+  }
+
+  const hire = result.rows[0];
+
+  try {
+    const user = await slack.users.lookupByEmail({ email: hire.email });
+    const slackUserId = user.user.id;
+    const checklist = getChecklist(hire.role);
+    const blocks = buildWelcomeBlocks(hire, checklist);
+
+    await slack.chat.postMessage({
+      channel: slackUserId,
+      text: `👋 Welcome to Foxglove, ${hire.name}!`,
+      blocks: blocks,
+    });
+
+    await dbClient.query(
+      "UPDATE new_hires SET slack_user_id = $1, welcome_sent = TRUE WHERE id = $2",
+      [slackUserId, hire.id]
+    );
+
+    console.log(`✅ Welcome message sent to ${hire.name}`);
+    await dbClient.end();
+    return { name: hire.name, email: hire.email };
+  } catch (error) {
+    await dbClient.end();
+
+    if (error.data?.error === "users_not_found") {
+      throw new Error(`Couldn't send welcome to *${hire.name}*. Their Slack account (${hire.email}) doesn't exist yet. Try again once their account is created.`);
+    }
+    throw new Error(`Couldn't send welcome to *${hire.name}*: ${error.message}`);
+  }
+}
+
 async function sendWelcomeMessages() {
   const dbClient = getDbClient();
   await dbClient.connect();
@@ -223,7 +267,7 @@ async function sendWelcomeMessages() {
 
   for (const hire of result.rows) {
     const timezone = hire.timezone || "America/Los_Angeles";
-    
+
     if (!isLocalTime10am(timezone)) {
       console.log(`Skipping ${hire.name} - not 10am in ${timezone} yet`);
       continue;
@@ -249,6 +293,23 @@ async function sendWelcomeMessages() {
       console.log(`✅ Welcome message sent to ${hire.name} (${timezone})`);
     } catch (error) {
       console.error(`❌ Failed to send welcome to ${hire.name}:`, error.message);
+
+      // Notify Britt about the failure
+      try {
+        let failureMsg = `⚠️ Failed to send welcome message to *${hire.name}* (${hire.email}, ${hire.role}).`;
+        if (error.data?.error === "users_not_found") {
+          failureMsg += `\n\nTheir Slack account doesn't exist yet. Use \`/retry-welcome\` to try again once their account is created.`;
+        } else {
+          failureMsg += `\n\nError: ${error.message}\nUse \`/retry-welcome\` to try again.`;
+        }
+
+        await slack.chat.postMessage({
+          channel: HR_NOTIFY_USER,
+          text: failureMsg,
+        });
+      } catch (notifyError) {
+        console.error("Failed to notify HR:", notifyError.message);
+      }
     }
   }
 
@@ -260,4 +321,4 @@ if (require.main === module) {
   sendWelcomeMessages();
 }
 
-module.exports = { sendWelcomeMessages, buildWelcomeBlocks };
+module.exports = { sendWelcomeMessages, buildWelcomeBlocks, sendWelcomeToHire };
