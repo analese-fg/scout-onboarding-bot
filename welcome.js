@@ -14,6 +14,13 @@ function getDbClient() {
   });
 }
 
+function isLocalTime10am(timezone) {
+  const now = new Date();
+  const localTime = new Date(now.toLocaleString("en-US", { timeZone: timezone }));
+  const hour = localTime.getHours();
+  return hour === 10;
+}
+
 async function sendWelcomeMessages() {
   const dbClient = getDbClient();
   await dbClient.connect();
@@ -28,6 +35,13 @@ async function sendWelcomeMessages() {
   console.log(`Found ${result.rows.length} new hires starting today`);
 
   for (const hire of result.rows) {
+    const timezone = hire.timezone || "America/Los_Angeles";
+    
+    if (!isLocalTime10am(timezone)) {
+      console.log(`Skipping ${hire.name} - not 10am in ${timezone} yet`);
+      continue;
+    }
+
     try {
       const user = await slack.users.lookupByEmail({ email: hire.email });
       const userId = user.user.id;
@@ -44,7 +58,7 @@ async function sendWelcomeMessages() {
             type: "section",
             text: {
               type: "mrkdwn",
-              text: `👋 *Welcome to Foxglove, ${hire.name}!*\n\nWe're so excited to have you join us on *${hire.role}*. Here's what you need to do to get started:\n\n📚 <${NOTION_ONBOARDING_LINK}|View the full onboarding guide in Notion>`,
+              text: `👋 *Welcome to Foxglove, ${hire.name}!*\n\nWe're so excited to have you join us as a *${hire.role}*. Here's what you need to do to get started:\n\n📚 <${NOTION_ONBOARDING_LINK}|View the full onboarding guide in Notion>`,
             },
           },
           {
@@ -99,7 +113,7 @@ async function sendWelcomeMessages() {
         [userId, hire.id]
       );
 
-      console.log(`✅ Welcome message sent to ${hire.name}`);
+      console.log(`✅ Welcome message sent to ${hire.name} (${timezone})`);
     } catch (error) {
       console.error(`❌ Failed to send welcome to ${hire.name}:`, error.message);
     }

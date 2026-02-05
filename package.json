@@ -11,6 +11,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.72.1",
     "@slack/bolt": "^4.6.0",
     "dotenv": "^17.2.3",
     "openai": "^6.17.0",

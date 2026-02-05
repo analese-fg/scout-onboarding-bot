@@ -3,7 +3,7 @@ const { Client } = require("pg");
 const http = require("http");
 const { roles } = require("./checklists");
 require("dotenv").config();
-const OpenAI = require("openai");
+const Anthropic = require("@anthropic-ai/sdk").default;
 const { companyKnowledge } = require("./knowledge");
 
 const app = new App({
@@ -13,8 +13,8 @@ const app = new App({
   appToken: process.env.SLACK_APP_TOKEN,
 });
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
 function getDbClient() {
@@ -115,6 +115,48 @@ app.command("/new-hire", async ({ ack, body, client }) => {
             text: "Start Date",
           },
         },
+        {
+          type: "input",
+          block_id: "timezone_block",
+          element: {
+            type: "static_select",
+            action_id: "timezone_input",
+            placeholder: {
+              type: "plain_text",
+              text: "Select timezone",
+            },
+            options: [
+              {
+                text: { type: "plain_text", text: "US Pacific (Los Angeles)" },
+                value: "America/Los_Angeles",
+              },
+              {
+                text: { type: "plain_text", text: "US Mountain (Denver)" },
+                value: "America/Denver",
+              },
+              {
+                text: { type: "plain_text", text: "US Central (Chicago)" },
+                value: "America/Chicago",
+              },
+              {
+                text: { type: "plain_text", text: "US Eastern (New York)" },
+                value: "America/New_York",
+              },
+              {
+                text: { type: "plain_text", text: "Australia Eastern (Sydney)" },
+                value: "Australia/Sydney",
+              },
+              {
+                text: { type: "plain_text", text: "Australia Western (Perth)" },
+                value: "Australia/Perth",
+              },
+            ],
+          },
+          label: {
+            type: "plain_text",
+            text: "Timezone",
+          },
+        },
       ],
     },
   });
@@ -131,6 +173,7 @@ app.view("new_hire_submission", async ({ ack, body, view, client }) => {
   const email = values.email_block.email_input.value;
   const role = values.role_block.role_input.selected_option.value;
   const startDate = values.start_date_block.start_date_input.selected_date;
+  const timezone = values.timezone_block.timezone_input.selected_option.value;
 
   console.log("Channel ID:", channelId);
 
@@ -154,15 +197,15 @@ app.view("new_hire_submission", async ({ ack, body, view, client }) => {
     await dbClient.connect();
 
     await dbClient.query(
-      "INSERT INTO new_hires (name, email, role, start_date) VALUES ($1, $2, $3, $4)",
-      [name, email, role, startDate]
+      "INSERT INTO new_hires (name, email, role, start_date, timezone) VALUES ($1, $2, $3, $4, $5)",
+      [name, email, role, startDate, timezone]
     );
 
     await dbClient.end();
 
     console.log(`✅ New hire registered: ${name} (${email}) starting ${startDate}`);
 
-    await sendResponse(`✅ New hire registered!\n\n*Name:* ${name}\n*Email:* ${email}\n*Role:* ${role}\n*Start Date:* ${startDate}`);
+    await sendResponse(`✅ New hire registered!\n\n*Name:* ${name}\n*Email:* ${email}\n*Role:* ${role}\n*Start Date:* ${startDate}\n*Timezone:* ${timezone}`);
   } catch (error) {
     console.error("Error registering new hire:", error);
 
@@ -294,39 +337,89 @@ app.view("tool_access_submission", async ({ ack, body, view, client }) => {
   console.log(`✅ Tool access request submitted by ${userId}: ${toolList}`);
 });
 
-app.message(async ({ message, say }) => {
+app.message(async ({ message, say, client }) => {
+  if (!message.text || message.bot_id || message.subtype) {
+    return;
+  }
   console.log("Received message:", message.text);
   const userMessage = message.text;
 
+  let thinkingMessage = null;
+  let thinkingTimeout = null;
+
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content: `You are Scout, a friendly onboarding assistant for Foxglove. Help new employees with their questions about onboarding, tools, and company information.
+    thinkingTimeout = setTimeout(async () => {
+      const result = await client.chat.postMessage({
+        channel: message.channel,
+        text: "🤔 Let me look that up for you... I'll have an answer shortly!",
+      });
+      thinkingMessage = result.ts;
+    }, 2000);
 
-Use the following knowledge base to answer questions. If you don't know the answer, say so and suggest they ask in #help-desk or reach out to their manager.
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 1024,
+      system: `You are Scout, a friendly onboarding assistant for Foxglove. You help new employees get settled in by answering their questions in a warm, conversational way.
 
-Be concise, friendly, and helpful. Use bullet points for lists. Include relevant links when available.
+Guidelines:
+- Answer questions naturally, like a helpful coworker would—don't just repeat documentation
+- Keep responses concise (2-4 short paragraphs max unless they ask for more detail)
+- Only include the most relevant information for their specific question
+- Include 1-2 helpful links when relevant, but don't overwhelm with links
+- Use a friendly, casual tone—you're a buddy, not a manual
+
+What you can help with:
+- Questions about Foxglove tools, processes, and policies—use the knowledge base below
+- General questions not related to Foxglove—use your general knowledge to help
+- If you don't know something about Foxglove specifically, suggest they ask in #help-desk or reach out to their manager
+
+IMPORTANT - Slack formatting rules (you MUST follow these):
+- For bold: use SINGLE asterisks like *bold* (NEVER use **double asterisks**)
+- For italics: use underscores like _italics_
+- For links: use <https://example.com|Link text> format
+- For bullet points: use • or - at the start of a line
+- NEVER use markdown formatting like **bold** or [link](url) - these do not work in Slack
+
+Here is your knowledge base about Foxglove:
 
 ${companyKnowledge}`,
-        },
+      messages: [
         {
           role: "user",
           content: userMessage,
         },
       ],
-      max_tokens: 1000,
     });
 
-    const answer = response.choices[0].message.content;
-    await say(answer);
+    clearTimeout(thinkingTimeout);
+
+    const answer = response.content[0].text;
+
+    if (thinkingMessage) {
+      await client.chat.update({
+        channel: message.channel,
+        ts: thinkingMessage,
+        text: answer,
+      });
+    } else {
+      await say(answer);
+    }
   } catch (error) {
-    console.error("Error calling OpenAI:", error);
-    await say(
-      "Sorry, I'm having trouble thinking right now. Please try again or ask in #help-desk for help!"
-    );
+    clearTimeout(thinkingTimeout);
+    console.error("Error calling Anthropic:");
+    console.error("Full error:", error);
+
+    const errorMessage = "Sorry, I'm having trouble thinking right now. Please try again or ask in #help-desk for help!";
+
+    if (thinkingMessage) {
+      await client.chat.update({
+        channel: message.channel,
+        ts: thinkingMessage,
+        text: errorMessage,
+      });
+    } else {
+      await say(errorMessage);
+    }
   }
 });
 
