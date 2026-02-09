@@ -727,24 +727,29 @@ ${companyKnowledge}`,
   await app.start();
   console.log("⚡️ Scout is running!");
 
-  const port = process.env.PORT || 3000;
-  http.createServer(async (req, res) => {
-    if (req.url === "/run-welcome" && req.method === "GET") {
-      console.log("🕐 Running scheduled welcome check...");
-      try {
-        const { sendWelcomeMessages } = require("./welcome");
-        await sendWelcomeMessages();
-        res.writeHead(200);
-        res.end("Welcome messages sent!");
-      } catch (error) {
-        console.error("Error running welcome:", error);
-        res.writeHead(500);
-        res.end("Error running welcome messages");
-      }
-    } else {
-      res.writeHead(200);
-      res.end("Scout is healthy!");
+  // Run welcome check every hour (built-in, no external cron needed)
+  const ONE_HOUR = 60 * 60 * 1000;
+
+  async function runWelcomeCheck() {
+    console.log("🕐 Running scheduled welcome check...");
+    try {
+      const { sendWelcomeMessages } = require("./welcome");
+      await sendWelcomeMessages();
+    } catch (error) {
+      console.error("Error running welcome check:", error);
     }
+  }
+
+  // Run once on startup, then every hour
+  await runWelcomeCheck();
+  setInterval(runWelcomeCheck, ONE_HOUR);
+  console.log("⏰ Welcome check scheduled to run every hour");
+
+  // HTTP server to keep Render web service alive
+  const port = process.env.PORT || 3000;
+  http.createServer((req, res) => {
+    res.writeHead(200);
+    res.end("Scout is healthy!");
   }).listen(port, () => {
     console.log(`🩺 Health check server running on port ${port}`);
   });

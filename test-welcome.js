@@ -18,7 +18,7 @@ async function testWelcome() {
   const dbClient = getDbClient();
   await dbClient.connect();
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = new Date().toLocaleDateString("en-CA"); // gives YYYY-MM-DD in local timezone
   const result = await dbClient.query(
     "SELECT * FROM new_hires WHERE start_date = $1 AND welcome_sent = FALSE",
     [today]
