@@ -653,8 +653,9 @@ app.message(async ({ message, say, client }) => {
         text: "🤔 Let me look that up for you... I'll have an answer shortly!",
       });
       thinkingMessage = result.ts;
-    }, 2000);
+    }, 3500);
 
+    const start = Date.now();
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-20250514",
       max_tokens: 1024,
@@ -691,6 +692,7 @@ ${companyKnowledge}`,
       ],
     });
 
+    console.log(`Claude responded in ${Date.now() - start}ms`);
     clearTimeout(thinkingTimeout);
 
     const answer = toSlackFormat(response.content[0].text);
